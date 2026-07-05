@@ -21,11 +21,25 @@ class TelemetryLogger:
             "distance_cm", 
             "center_error_px", 
             "fsm_state", 
-            "output_action"
+            "output_action",
+            "yolo_confidence",
+            "color_score",
+            "combined_score"
         ])
         self.start_time = time.time()
 
-    def log_step(self, target_color, is_detected, distance, error, fsm_state, action):
+    def log_step(
+        self,
+        target_color,
+        is_detected,
+        distance,
+        error,
+        fsm_state,
+        action,
+        yolo_confidence=None,
+        color_score=None,
+        combined_score=None,
+    ):
         """
         Appends a single frame's data as a row in the CSV file safely.
         """
@@ -35,6 +49,9 @@ class TelemetryLogger:
         # Normalize missing numerics so the CSV doesn't break
         dist_val = round(distance, 2) if distance is not None else ""
         err_val = round(error, 2) if error is not None else ""
+        yolo_val = round(yolo_confidence, 4) if yolo_confidence is not None else ""
+        color_val = round(color_score, 4) if color_score is not None else ""
+        combined_val = round(combined_score, 4) if combined_score is not None else ""
 
         self.writer.writerow([
             now, 
@@ -44,7 +61,10 @@ class TelemetryLogger:
             dist_val, 
             err_val, 
             fsm_state, 
-            action
+            action,
+            yolo_val,
+            color_val,
+            combined_val,
         ])
         
         # Flush to disk immediately so data isn't lost if the rover crashes/loses power

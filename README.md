@@ -1,51 +1,197 @@
 # Autonomous Balloon Rover
 
-Provides autonomous vision tracking using OpenCV. The rover tracks the balloons in this sequence: BLACK → WHITE → PINK → YELLOW → BLUE.
+This project is a vision pipeline for an autonomous rover that detects balloons in the sequence BLACK → WHITE → PINK → YELLOW → BLUE, verifies the color with HSV, estimates distance, and emits clean action messages for a separate motion controller.
 
-## Setup Instructions
+## What the system does
 
-### 1. Create and Activate Virtual Environment
+The current runtime is a two-stage detector:
+
+1. **YOLO11 / ONNX** finds candidate balloon regions in the frame.
+2. **OpenCV HSV + contour checks** verifies the target color only inside each YOLO ROI.
+
+That means the system does **not** scan the entire frame with HSV alone during autonomous mode. If the model does not propose a balloon region, the frame is treated as having no valid target.
+
+## Repository layout
+
+- `src/main.py`: state machine, frame loop, hold timer, and action output
+- `src/vision.py`: YOLO candidate detection, ROI color verification, and distance estimation
+- `src/config.py`: HSV bounds, camera settings, model path, and thresholds
+- `src/utils/telemetry.py`: per-frame CSV logging for debugging
+- `tools/calibrate.py`: interactive HSV calibration helper
+- `tools/calibrate_focal.py`: focal length calibration helper
+
+## Setup
+
+### 1. Create and activate a virtual environment
 
 ```bash
 python3 -m venv venv
 source venv/bin/activate
 ```
 
-### 2. Install Dependencies
+### 2. Install dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 3. Usage
+### 3. Put the model in the expected location
 
-**Calibrating Colors:**
-Every lighting environment is different. To find the exact HSV bounds for your balloons:
+The runtime expects the ONNX export of your trained balloon detector at:
 
 ```bash
-python -m tools.calibrate
+Ballon_Detection_Weights/best.onnx
 ```
 
-Adjust the sliders until the balloon is bright white on the mask and everything else is black. Press `q` to quit and print the values. Update `src/config.py` with these printed thresholds.
+If you want to use a different path, set `YOLO_MODEL_PATH` in the environment before launch.
 
-**Running in Development Mode (Laptop Webcam):**
+## How to run
+
+### Development mode with a laptop webcam
 
 ```bash
 CAMERA_INDEX=0 python -m src.main
 ```
 
-**Running in Deployment Mode (Rover USB Camera):**
-Connect the USB camera. Often, external USB cameras mount at index 1 or 2.
+### Deployment mode with the rover USB camera
 
 ```bash
 CAMERA_INDEX=1 python -m src.main
 ```
 
-## System Integration (Pure CV Node)
+### Color calibration
 
-This module acts as a "Perception Node". The motion integration logic has been fully decoupled for another software team to implement. When running `src/main.py`, the system continually prints standardized JSON outputs containing the calculated action.
+Use this when tuning HSV bounds for the current lighting:
 
-Example outputs:
+```bash
+python -m tools.calibrate
+```
+
+### Focal length calibration
+
+Use this to improve the 1.5 m distance estimate:
+
+```bash
+python -m tools.calibrate_focal
+```
+
+## How Calibration Works
+
+There are two calibration steps in this project, and both matter for reliable detection.
+
+### 1. HSV color calibration
+
+This step tunes the color ranges used by the OpenCV detector.
+
+Run:
+
+```bash
+python -m tools.calibrate
+```
+
+What happens during calibration:
+
+1. The camera opens a live preview.
+2. You adjust the HSV sliders until the target balloon is clearly isolated in the mask.
+3. The goal is to make the balloon appear white in the mask and the background appear black.
+4. When the mask looks correct, press `q` to print the final HSV bounds.
+5. Copy those bounds into `src/config.py` if you need to replace the default values.
+
+Why this matters:
+
+- lighting changes can shift the apparent color of a balloon
+- different cameras interpret color slightly differently
+- a good calibration reduces false positives and missed detections
+
+### 2. Focal length calibration
+
+This step tunes the distance estimate used by the pinhole camera model.
+
+Run:
+
+```bash
+python -m tools.calibrate_focal
+```
+
+What happens during calibration:
+
+1. Place a balloon at a known distance, usually 100 cm from the camera.
+2. Draw a box around the balloon in the preview window.
+3. The script uses the known real-world balloon width and the measured pixel width to calculate `FOCAL_LENGTH_PX`.
+4. Copy the printed focal length into `src/config.py`.
+
+Why this matters:
+
+- the stop distance depends on the accuracy of the focal length
+- if the focal length is wrong, the rover may stop too early or too late
+- calibrating on the actual camera improves consistency more than using a guessed value
+
+## Why HSV Is Used
+
+The project uses HSV instead of raw BGR or RGB because HSV separates color from brightness.
+
+### What HSV means
+
+- **Hue** describes the actual color, such as red, blue, or yellow
+- **Saturation** describes how strong or pure the color is
+- **Value** describes brightness
+
+### Why that helps
+
+Color detection in BGR is sensitive to lighting because all three channels mix color and brightness together. A shadow, glare, or exposure change can make the same balloon look very different in RGB/BGR space.
+
+HSV is more stable for this task because:
+
+1. the balloon color is mostly represented by Hue
+2. brightness changes mostly affect the Value channel instead of the color identity
+3. thresholds are easier to tune for specific target colors
+
+### How HSV is used in this project
+
+After YOLO finds a candidate balloon region, the code:
+
+1. crops the region of interest
+2. converts that crop from BGR to HSV
+3. applies the target color bounds from `src/config.py`
+4. creates a binary mask where matching pixels are white and everything else is black
+5. cleans the mask with erosion and dilation
+6. checks the resulting contour to make sure the object is large and valid enough to be treated as a balloon
+
+This gives the system a two-stage filter:
+
+- YOLO decides whether the object looks like a balloon
+- HSV decides whether that balloon is the correct color
+
+That combination is much more reliable than trying to use color alone.
+
+## Detection pipeline
+
+The core color logic in `src/vision.py` works like this:
+
+1. The camera frame is captured in BGR.
+2. YOLO11 proposes balloon candidate bounding boxes.
+3. The code crops each YOLO box to an ROI.
+4. The ROI is converted to HSV.
+5. The target color bounds from `src/config.py` are applied.
+6. Morphological operations remove noise.
+7. Contours are used to confirm a strong object region.
+8. The balloon width is used in the pinhole approximation:
+
+```text
+Distance = (Real Balloon Width × Focal Length) / Pixel Width
+```
+
+## Autonomous behavior
+
+`src/main.py` tracks the target sequence and only advances when:
+
+- the correct balloon color is detected
+- the estimated distance is at or below 1.5 m
+- the rover holds position for 5 seconds
+
+Instead of sending motor commands directly, the script prints JSON-style action messages to stdout. This keeps the vision stack decoupled from the motor-control stack.
+
+Example output:
 
 ```json
 OUTPUT: {"action": "SPIN_RIGHT", "error_px": 125}
@@ -53,27 +199,32 @@ OUTPUT: {"action": "DRIVE_FORWARD", "distance_cm": 240.2}
 OUTPUT: {"action": "STOP", "reason": "target_reached", "distance_cm": 149.0}
 ```
 
-Another script (e.g., a ROS node or a Python serial manager) can capture standard output (`stdout`) from this script and translate `DRIVE_FORWARD` or `SPIN_LEFT` into motor PWM signals.
+## Telemetry
 
-## Focal Length Calibration
+Each run creates a new CSV file in `logs/` with timestamped frame records. The log includes:
 
-To ensure the 1.5-meter stopping distance is highly accurate, you must calibrate the exact focal length `FOCAL_LENGTH_PX` of your camera lens.
+- timestamp
+- uptime
+- target color
+- detection flag
+- distance estimate
+- center error
+- FSM state
+- emitted action
 
-1. Place a fully inflated competition balloon exactly **100cm (1.0 meter)** away from your lens.
-2. Run the focal length calibration script:
-   ```bash
-   python -m tools.calibrate_focal
-   ```
-3. A picture window will appear. Click and drag a tight box around the exact width of the balloon.
-4. Press `SPACE` or `ENTER`.
-5. The terminal will print out your exact `FOCAL_LENGTH_PX`. Update this value inside `src/config.py`.
+This is useful for debugging false detections, distance tuning, and camera/model issues.
 
-## How Color Detection Works
+## Edge-device notes
 
-The core of the balloon color detection and tracking is located in `src/vision.py` within the `process_frame` method. Here is a step-by-step breakdown of the computer vision pipeline:
+The trained model is intended for deployment as ONNX rather than running PyTorch directly at runtime. Keep the original `.pt` files for retraining only, and deploy the `.onnx` export on edge hardware.
 
-1. **Color Space Conversion**: The camera captures frames in the BGR (Blue, Green, Red) color space. The code converts this to the **HSV** (Hue, Saturation, Value) color space using `cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)`. HSV separates color/tint (Hue) from lighting intensity (Value), making it much more robust against shadows and changing lighting conditions than standard RGB.
-2. **Thresholding (Masking)**: Using the pre-calibrated lower and upper bounds defined in `src/config.py`, `cv2.inRange()` creates a binary mask. It evaluates every pixel in the image: if a pixel's HSV values fall within the limits for the required color, it turns white on the mask. Everything else turns black.
-3. **Morphological Noise Reduction**: Glare or background objects often cause tiny specks of false positives (noise). The code cleans the mask using **Erosion** (`cv2.erode()`) to strip away these tiny speckles, followed immediately by **Dilation** (`cv2.dilate()`) to restore the mass/size of the actual balloon region.
-4. **Contour Extraction**: With a clean mask, the script finds the outer boundaries of the white blobs using `cv2.findContours()`.
-5. **Distance & Target Selection**: It looks for the largest contour (by pixel area) and assumes this is the closest target balloon. It then wraps it in a bounding box (`cv2.boundingRect()`). The width of this bounding box is plugged into a simple Pinhole Camera approximation map (`Distance = (Real_Width * Focal_Length) / Pixel_Width`) to determine how far away the balloon is, allowing the rover to know when it has reached the 1.5-meter hold threshold.
+Recommended runtime behavior:
+
+- use the ONNX model on the device
+- keep batch size at 1
+- keep the camera resolution modest
+- use telemetry to watch inference time and false positives
+
+## Git and model files
+
+The repository ignores model artifacts and generated logs. Keep the weight files local or distribute them through a release artifact instead of committing them to Git.

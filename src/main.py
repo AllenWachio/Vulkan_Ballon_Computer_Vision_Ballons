@@ -74,6 +74,9 @@ def main():
             action_taken = "NONE"
             fsm_state = "HOLDING" if state.holding else "SEARCH/APPROACH"
             is_detected = bool(target_info)
+            yolo_confidence = target_info.get('yolo_confidence') if target_info else None
+            color_score = target_info.get('color_score') if target_info else None
+            combined_score = target_info.get('combined_score') if target_info else None
 
             # --- UI Display logic ---
             debug_frame = frame.copy()
@@ -118,7 +121,17 @@ def main():
                     cv2.putText(debug_frame, "SEARCHING...", (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 165, 255), 2)
 
             # Record exactly what happened on this frame to the CSV
-            telemetry.log_step(target_color, is_detected, dist_val, err_val, fsm_state, action_taken)
+            telemetry.log_step(
+                target_color,
+                is_detected,
+                dist_val,
+                err_val,
+                fsm_state,
+                action_taken,
+                yolo_confidence=yolo_confidence,
+                color_score=color_score,
+                combined_score=combined_score,
+            )
 
             cv2.imshow("CV Perception Node", debug_frame)
             cv2.imshow("CV Mask", mask)

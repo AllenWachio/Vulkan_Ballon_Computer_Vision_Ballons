@@ -6,4 +6,8 @@ __pycache__/
 logs/
 *.csv
 .vscode
+*.pt
+*.onnx
+Ballon_Detection_Weights/
+Hammer_Tennisball_Trafficcone_Weights/
 

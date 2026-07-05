@@ -26,5 +26,20 @@ CAMERA_INDEX = int(os.environ.get('CAMERA_INDEX', 0))
 CAMERA_WIDTH = 640
 CAMERA_HEIGHT = 480
 
+# YOLO11 balloon detector settings
+# Runtime uses the ONNX export so the rover does not need PyTorch at inference time.
+YOLO_MODEL_PATH = os.environ.get(
+    'YOLO_MODEL_PATH',
+    'Ballon_Detection_Weights/best.onnx'
+)
+YOLO_CONF_THRESHOLD = float(os.environ.get('YOLO_CONF_THRESHOLD', '0.35'))
+YOLO_IOU_THRESHOLD = float(os.environ.get('YOLO_IOU_THRESHOLD', '0.45'))
+YOLO_INPUT_SIZE = int(os.environ.get('YOLO_INPUT_SIZE', '640'))
+YOLO_ENABLED = os.environ.get('YOLO_ENABLED', '1') != '0'
+
+# ROI verification thresholds used after YOLO proposes a balloon candidate.
+COLOR_MASK_MIN_RATIO = float(os.environ.get('COLOR_MASK_MIN_RATIO', '0.08'))
+COLOR_COMBINED_SCORE_THRESHOLD = float(os.environ.get('COLOR_COMBINED_SCORE_THRESHOLD', '0.35'))
+
 # Control limits
 CENTER_TOLERANCE_PX = 50 # Tolerance to consider the balloon centered
