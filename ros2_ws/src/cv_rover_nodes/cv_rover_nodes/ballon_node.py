@@ -88,8 +88,14 @@ class BalloonNode(Node):
         # 3. Setup ROS Interfaces
         self.cmd_vel_pub = self.create_publisher(Twist, '/cmd_vel', 10)
         self.state_pub = self.create_publisher(String, '/balloon_state', 10)
-        self.image_sub = self.create_subscription(Image, '/camera/color/image_raw', self.image_callback, 10)
         
+        # --- CHANGE IS HERE: Updated topic name to match the new CSI camera node ---
+        self.image_sub = self.create_subscription(
+            Image, 
+            '/camera/image_raw',  # Changed from '/camera/color/image_raw'
+            self.image_callback, 
+            10
+        )
         self.bridge = CvBridge()
         
         # 4. Initialize Perception
