@@ -9,13 +9,21 @@ def generate_launch_description():
 
     return LaunchDescription([
         # 1. Camera Driver (Uncomment and configure based on your hardware)
-        # Node(
-        #     package='v4l2_camera',
-        #     executable='v4l2_camera_node',
-        #     name='camera',
-        #     parameters=[{'image_width': 640, 'image_height': 480}]
-        # ),
-        
+
+        Node(
+            package='v4l2_camera',
+            executable='v4l2_camera_node',
+            name='camera',
+            parameters=[{
+                'image_size': [640, 480],  # v4l2 uses an array for size
+                'video_device': '/dev/video0' # Usually 0 for laptop webcams
+            }],
+            remappings=[
+                ('/image_raw', '/camera/color/image_raw'), # <--- CRITICAL: Remaps the topic!
+                ('/camera_info', '/camera/color/camera_info')
+            ],
+            output='screen'
+        ),
         # 2. Balloon Node
         Node(
             package='cv_rover_nodes',

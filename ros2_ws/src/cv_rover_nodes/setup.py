@@ -12,9 +12,14 @@ setup(
     data_files=[
         ('share/ament_index/resource_index/packages', ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
-        (os.path.join('share', package_name, 'launch'), glob('launch/*.py')),
-        (os.path.join('share', package_name, 'config'), glob('config/*.yaml')),
+        
+        # --- CORRECTED PATHS ---
+        # Points to the inner cv_rover_nodes folder where launch/config actually live
+        (os.path.join('share', package_name, 'launch'), glob('cv_rover_nodes/launch/*.py')),
+        (os.path.join('share', package_name, 'config'), glob('cv_rover_nodes/config/*.yaml')),
     ],
+    # Note: 'opencv-python' can sometimes conflict with system 'python3-opencv'. 
+    # If you get build errors, remove 'opencv-python' from this list (ROS 2 handles it via apt).
     install_requires=['setuptools', 'onnxruntime', 'opencv-python', 'numpy'],
     zip_safe=True,
     maintainer='allen-wachio',
@@ -28,7 +33,10 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'balloon_node = cv_rover_nodes.balloon_node:main',
+            # --- CORRECTED SPELLING ---
+            # Change this to 'ballon_node' IF your file is actually named ballon_node.py.
+            # (Highly recommended: Rename the file to balloon_node.py with two L's instead)
+            'balloon_node = cv_rover_nodes.ballon_node:main', 
             'object_node = cv_rover_nodes.object_node:main',
         ],
     },
