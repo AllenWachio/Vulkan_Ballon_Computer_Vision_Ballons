@@ -104,11 +104,12 @@ def generate_launch_description():
     ])
 
 """
+SCENARIOS:
 Scenario A: You are on a Jetson, doing Object task
 ros2 launch cv_rover_nodes cv_rover.launch.py task:=object camera:=jetson
 
-Scenario B: You are on a Jetson, doing Ballon task
-ros2 launch cv_rover_nodes cv_rover.launch.py task:=ballon camera:=jetson
+Scenario B: You are on a Jetson, doing Balloon task
+ros2 launch cv_rover_nodes cv_rover.launch.py task:=balloon camera:=jetson
 
 Scenario C: You are on a Raspberry Pi, doing Balloon task
 ros2 launch cv_rover_nodes cv_rover.launch.py task:=balloon camera:=rpi

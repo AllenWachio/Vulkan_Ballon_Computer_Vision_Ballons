@@ -16,7 +16,7 @@ class CsiCameraNode(Node):
         self.declare_parameter('flip_method', 0)
         self.declare_parameter('topic_name', '/camera/image_raw')
         
-        # --- NEW: Declare camera type parameter ---
+        # NEW: Declare camera type parameter
         self.declare_parameter('camera_type', 'jetson') # 'jetson' or 'rpi'
         
         # Get parameters
@@ -30,9 +30,11 @@ class CsiCameraNode(Node):
 
         self.bridge = CvBridge()
 
-        # --- DYNAMICALLY BUILD PIPELINE BASED ON PARAMETER ---
+        # DYNAMICALLY BUILD PIPELINE BASED ON PARAMETER
         if camera_type == 'rpi':
             self.get_logger().info("Configuring for Raspberry Pi (libcamera)...")
+            # Note: If you use a camera other than V2 (IMX219), you may need to 
+            # change the 'camera-name' path in this pipeline.
             gst_pipeline = (
                 f"libcamerasrc camera-name=/base/soc/i2c0mux/i2c@1/imx219@10 ! "
                 f"video/x-raw,width={width},height={height},framerate={framerate}/1 ! "
@@ -55,7 +57,6 @@ class CsiCameraNode(Node):
         self.get_logger().info(f"Opening CSI camera with pipeline:\n{gst_pipeline}")
         self.cap = cv2.VideoCapture(gst_pipeline, cv2.CAP_GSTREAMER)
 
-        # ... (Keep the rest of your __init__ exactly the same) ...
         if not self.cap.isOpened():
             self.get_logger().error("Failed to open CSI camera. Check your GStreamer pipeline.")
             raise RuntimeError("Could not initialize camera.")
@@ -102,15 +103,3 @@ def main(args=None):
 
 if __name__ == '__main__':
     main()
-
-
-""""
-USE THIS CODE IF ON THE RAPSBERRY PI USIND MODERN 
-gst_pipeline = (
-    f"libcamerasrc camera-name=/base/soc/i2c0mux/i2c@1/imx219@10 ! "
-    f"video/x-raw,width={width},height={height},framerate={framerate}/1 ! "
-    f"videoconvert ! "
-    f"video/x-raw,format=BGR ! "
-    f"appsink"
-)
-"""
