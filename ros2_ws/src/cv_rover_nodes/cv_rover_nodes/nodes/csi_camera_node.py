@@ -10,11 +10,14 @@ class CsiCameraNode(Node):
         
         # Declare parameters
         self.declare_parameter('camera_id', 0)
-        self.declare_parameter('width', 1280)
-        self.declare_parameter('height', 720)
+        self.declare_parameter('width', 640)  # Default to 640
+        self.declare_parameter('height', 480) # Default to 480
         self.declare_parameter('framerate', 30.0)
-        self.declare_parameter('flip_method', 0) # 0=none, 2=rotate-180, etc.
+        self.declare_parameter('flip_method', 0)
         self.declare_parameter('topic_name', '/camera/image_raw')
+        
+        # --- NEW: Declare camera type parameter ---
+        self.declare_parameter('camera_type', 'jetson') # 'jetson' or 'rpi'
         
         # Get parameters
         camera_id = self.get_parameter('camera_id').value
@@ -23,27 +26,36 @@ class CsiCameraNode(Node):
         framerate = self.get_parameter('framerate').value
         flip_method = self.get_parameter('flip_method').value
         topic_name = self.get_parameter('topic_name').value
+        camera_type = self.get_parameter('camera_type').value # Get the new param
 
-        # Initialize CvBridge
         self.bridge = CvBridge()
 
-        # Create GStreamer pipeline for NVIDIA Jetson CSI Camera
-        # If you are NOT on a Jetson, see the alternative pipeline below
-        gst_pipeline = (
-            f"nvarguscamerasrc sensor-id={camera_id} ! "
-            f"video/x-raw(memory:NVMM), width={width}, height={height}, framerate={framerate}/1 ! "
-            f"nvvidconv flip-method={flip_method} ! "
-            f"video/x-raw, format=BGRx ! "
-            f"videoconvert ! "
-            f"video/x-raw, format=BGR ! "
-            f"appsink"
-        )
+        # --- DYNAMICALLY BUILD PIPELINE BASED ON PARAMETER ---
+        if camera_type == 'rpi':
+            self.get_logger().info("Configuring for Raspberry Pi (libcamera)...")
+            gst_pipeline = (
+                f"libcamerasrc camera-name=/base/soc/i2c0mux/i2c@1/imx219@10 ! "
+                f"video/x-raw,width={width},height={height},framerate={framerate}/1 ! "
+                f"videoconvert ! "
+                f"video/x-raw,format=BGR ! "
+                f"appsink"
+            )
+        else: # Default to Jetson
+            self.get_logger().info("Configuring for NVIDIA Jetson (nvargus)...")
+            gst_pipeline = (
+                f"nvarguscamerasrc sensor-id={camera_id} ! "
+                f"video/x-raw(memory:NVMM), width={width}, height={height}, framerate={framerate}/1 ! "
+                f"nvvidconv flip-method={flip_method} ! "
+                f"video/x-raw, format=BGRx ! "
+                f"videoconvert ! "
+                f"video/x-raw, format=BGR ! "
+                f"appsink"
+            )
 
         self.get_logger().info(f"Opening CSI camera with pipeline:\n{gst_pipeline}")
-        
-        # OpenCV capture with GStreamer backend
         self.cap = cv2.VideoCapture(gst_pipeline, cv2.CAP_GSTREAMER)
 
+        # ... (Keep the rest of your __init__ exactly the same) ...
         if not self.cap.isOpened():
             self.get_logger().error("Failed to open CSI camera. Check your GStreamer pipeline.")
             raise RuntimeError("Could not initialize camera.")
