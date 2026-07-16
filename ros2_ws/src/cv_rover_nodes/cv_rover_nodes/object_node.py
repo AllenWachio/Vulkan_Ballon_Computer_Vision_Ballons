@@ -47,9 +47,14 @@ class ObjectNode(Node):
         self.enable_debug_image = self.get_parameter('enable_debug_image').value
         
         # 3. Setup ROS Interfaces
+        # --- CHANGE IS HERE: Updated topic name to match the new CSI camera node ---
         self.image_sub = self.create_subscription(
-            Image, '/camera/color/image_raw', self.image_callback, 10
+            Image, 
+            '/camera/image_raw',  # Changed from '/camera/color/image_raw'
+            self.image_callback, 
+            10
         )
+        
         self.det_pub = self.create_publisher(
             Detection2DArray, '/object_detections', 10
         )
